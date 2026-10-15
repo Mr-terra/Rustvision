@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.104"
+minifb = "0.29.0"
+nokhwa = { version = "0.10.11", features = ["input-msmf"] }
