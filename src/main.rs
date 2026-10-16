@@ -50,6 +50,10 @@ fn main() -> Result<()> {
 }
 
 fn from_u8_rgb(r: u8, g: u8, b: u8) -> u32 {
-    let (r, g, b) = (r as u32, g as u32, b as u32);
-    (r << 16) | (g << 8) | b
+    let (mut r,mut g, mut b) = (r as f32, g as f32, b as f32);
+    r =   0.299 * r;
+    g =   0.587 * g;
+    b =   0.114 * b;
+    let gray = (r + g + b) / 3.0;
+    ((gray as u32) << 16) | ((gray as u32) << 8) | (gray as u32)
 }
