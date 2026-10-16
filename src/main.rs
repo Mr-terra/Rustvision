@@ -15,10 +15,9 @@ fn main() -> Result<()> {
     my_camera.open_stream()?;
     // setup window
     let mut my_frame = my_camera.frame()?;
-    let mut my_result = my_frame.decode_image::<RgbFormat>()?;
 
-    let window_width = my_result.width().try_into()?;
-    let window_height = my_result.height().try_into()?;
+    let window_width = my_camera.camera_format().width().try_into()?;
+    let window_height = my_camera.camera_format().height().try_into()?;
 
     let mut new_window = Window::new(
         "Test",
@@ -26,14 +25,14 @@ fn main() -> Result<()> {
         window_height,
         WindowOptions::default(),
     )?;
-    let mut buffer: Vec<u32> = my_result
-        .pixels()
-        .map(|pixel| from_u8_rgb(pixel[0], pixel[1], pixel[2]))
-        .collect::<Vec<u32>>();
+
+    let mut buffer: Vec<u32> = vec![0; window_width * window_height];
+
 
     while !new_window.is_key_down(Key::Escape) && new_window.is_open() {
+
         my_frame = my_camera.frame()?;
-        my_result = my_frame.decode_image::<RgbFormat>()?;
+        let my_result = my_frame.decode_image::<RgbFormat>()?;
 
         for (colour, case) in my_result
             .pixels()
@@ -54,6 +53,6 @@ fn from_u8_rgb(r: u8, g: u8, b: u8) -> u32 {
     r =   0.299 * r;
     g =   0.587 * g;
     b =   0.114 * b;
-    let gray = (r + g + b) / 3.0;
+    let gray = r + g + b;
     ((gray as u32) << 16) | ((gray as u32) << 8) | (gray as u32)
 }
