@@ -1,3 +1,9 @@
+mod pipeline {
+    pub mod blobs;
+}
+
+use std::collections::VecDeque;
+
 use anyhow::Result;
 use minifb::{Key, KeyRepeat, Window, WindowOptions};
 use nokhwa::{
@@ -5,6 +11,7 @@ use nokhwa::{
     pixel_format::RgbFormat,
     utils::{CameraIndex, RequestedFormat, RequestedFormatType},
 };
+use pipeline::blobs::{Region, find_regions};
 
 fn main() -> Result<()> {
     // setup camera
@@ -31,6 +38,11 @@ fn main() -> Result<()> {
     let mut background: Vec<u8> = vec![0; size]; // background image in grayscale
     let mut background_ready = false;
 
+    // NEW: buffers for region detection, allocated once outside the hot loop
+    let mut mask: Vec<bool> = vec![false; size]; // true = changed pixel not yet visited
+    let mut queue: VecDeque<(usize, usize)> = VecDeque::with_capacity(size); // pixels to process
+    let mut regions: Vec<Region> = Vec::with_capacity(64); // one box per component
+
     let mut threshold: u8 = 30;
 
     while !new_window.is_key_down(Key::Escape) && new_window.is_open() {
@@ -53,14 +65,19 @@ fn main() -> Result<()> {
             println!("Background captured");
         }
 
-        // 3. Double zip: current frame + background -> display buffer
-        for ((&gray, &bg), case) in gray_buffer
+        // 3. Triple zip: current frame + background -> display buffer + mask
+        for (((&gray, &bg), case), is_changed) in gray_buffer
             .iter()
             .zip(background.iter())
             .zip(buffer.iter_mut())
+            .zip(mask.iter_mut())
         {
             *case = diff_threshold(gray.abs_diff(bg), threshold);
+            *is_changed = *case != 0; // white pixel = changed
         }
+
+        // find_regions(&mut mask, window_width, window_height, &mut queue, &mut regions);
+        // println!("Regions: {}", regions.len()); // temporary, until boxes are drawn
 
         new_window.update_with_buffer(&buffer, window_width, window_height)?;
 
