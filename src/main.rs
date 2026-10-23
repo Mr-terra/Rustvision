@@ -1,7 +1,4 @@
-mod pipeline {
-    pub mod blobs;
-}
-
+mod pipeline;
 use std::collections::VecDeque;
 
 use anyhow::Result;
@@ -25,6 +22,10 @@ fn main() -> Result<()> {
     let window_width = my_camera.camera_format().width().try_into()?;
     let window_height = my_camera.camera_format().height().try_into()?;
 
+    // Queue coordinates are stored as u16: reject resolutions that don't fit
+    u16::try_from(window_width)?;
+    u16::try_from(window_height)?;
+
     let mut new_window = Window::new(
         "Test",
         window_width,
@@ -40,7 +41,7 @@ fn main() -> Result<()> {
 
     // NEW: buffers for region detection, allocated once outside the hot loop
     let mut mask: Vec<bool> = vec![false; size]; // true = changed pixel not yet visited
-    let mut queue: VecDeque<(usize, usize)> = VecDeque::with_capacity(size); // pixels to process
+    let mut queue: VecDeque<(u16, u16)> = VecDeque::with_capacity(size); // pixels to process
     let mut regions: Vec<Region> = Vec::with_capacity(64); // one box per component
 
     let mut threshold: u8 = 30;
