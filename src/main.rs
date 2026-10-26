@@ -12,10 +12,6 @@ use pipeline::blobs::{Region, find_regions};
 use pipeline::display::draw_tracks;
 use pipeline::tracker::{MAX_DETECTIONS, Tracker};
 
-// Archive (milestone 4): raw region boxes, replaced by draw_tracks in display.rs
-#[allow(dead_code)]
-const BOX_COLOR: u32 = 0x00FF_0000; // red: visible on both black and white pixels
-
 fn main() -> Result<()> {
     // setup camera
     let mut my_camera = Camera::new(
@@ -125,7 +121,8 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// grayscale as u8, rounded to nearest (max possible value is 255.0, so no overflow)
+// grayscale as u8, rounded to nearest (max is ~255.0 in f32, round() keeps it at 255, so no overflow)
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn from_u8_gray(r: u8, g: u8, b: u8) -> u8 {
     let gray = 0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b);
     gray.round() as u8
