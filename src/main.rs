@@ -9,6 +9,12 @@ use nokhwa::{
     utils::{CameraIndex, RequestedFormat, RequestedFormatType},
 };
 use pipeline::blobs::{Region, find_regions};
+use pipeline::display::draw_tracks;
+use pipeline::tracker::{MAX_DETECTIONS, Tracker};
+
+// Archive (milestone 4): raw region boxes, replaced by draw_tracks in display.rs
+#[allow(dead_code)]
+const BOX_COLOR: u32 = 0x00FF_0000; // red: visible on both black and white pixels
 
 fn main() -> Result<()> {
     // setup camera
@@ -39,12 +45,16 @@ fn main() -> Result<()> {
     let mut background: Vec<u8> = vec![0; size]; // background image in grayscale
     let mut background_ready = false;
 
-    // NEW: buffers for region detection, allocated once outside the hot loop
+    // buffers for region detection, allocated once outside the hot loop
     let mut mask: Vec<bool> = vec![false; size]; // true = changed pixel not yet visited
     let mut queue: VecDeque<(u16, u16)> = VecDeque::with_capacity(size); // pixels to process
-    let mut regions: Vec<Region> = Vec::with_capacity(64); // one box per component
+    let mut regions: Vec<Region> = Vec::with_capacity(MAX_DETECTIONS); // one box per component
 
-    let mut threshold: u8 = 30;
+    // tracking: tracks and work buffers are pre-allocated inside the Tracker
+    let mut tracker = Tracker::new();
+
+    let mut threshold: u8 = 90;
+    let mut min_area: usize = 50; // components below this are noise
 
     while !new_window.is_key_down(Key::Escape) && new_window.is_open() {
         let my_frame = my_camera.frame()?;
@@ -77,8 +87,21 @@ fn main() -> Result<()> {
             *is_changed = *case != 0; // white pixel = changed
         }
 
-        // find_regions(&mut mask, window_width, window_height, &mut queue, &mut regions);
-        // println!("Regions: {}", regions.len()); // temporary, until boxes are drawn
+        // 4. Group changed pixels into regions, small ones are filtered out as noise
+        find_regions(
+            &mut mask,
+            window_width,
+            window_height,
+            min_area,
+            &mut queue,
+            &mut regions,
+        );
+
+        // 5. Associate detections with tracks and update their states
+        tracker.update(&regions);
+
+        // 6. Draw each track (box, centre, id, color by state), in place, before display
+        draw_tracks(&mut buffer, window_width, window_height, tracker.tracks());
 
         new_window.update_with_buffer(&buffer, window_width, window_height)?;
 
@@ -88,6 +111,14 @@ fn main() -> Result<()> {
         } else if new_window.is_key_down(Key::Down) {
             threshold = threshold.saturating_sub(1);
             println!("Threshold: {threshold}");
+        }
+
+        if new_window.is_key_down(Key::Right) {
+            min_area = min_area.saturating_add(5);
+            println!("Min area: {min_area}");
+        } else if new_window.is_key_down(Key::Left) {
+            min_area = min_area.saturating_sub(5);
+            println!("Min area: {min_area}");
         }
     }
 
