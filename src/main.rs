@@ -100,9 +100,14 @@ fn main() -> Result<()> {
         }
         last_frame_ok = Instant::now();
 
-        // 1. RGB -> grayscale, 3 bytes at a time
-        for (rgb, gray) in rgb_buffer.chunks_exact(3).zip(gray_buffer.iter_mut()) {
+        // 1. RGB -> grayscale for detection, RGB -> 0RGB for the display, 3 bytes at a time
+        for ((rgb, gray), pixel) in rgb_buffer
+            .chunks_exact(3)
+            .zip(gray_buffer.iter_mut())
+            .zip(buffer.iter_mut())
+        {
             *gray = from_u8_gray(rgb[0], rgb[1], rgb[2]);
+            *pixel = (u32::from(rgb[0]) << 16) | (u32::from(rgb[1]) << 8) | u32::from(rgb[2]);
         }
 
         // 2. Capture the background: first frame, then each time Space is pressed
@@ -112,15 +117,13 @@ fn main() -> Result<()> {
             println!("Background captured");
         }
 
-        // 3. Triple zip: current frame + background -> display buffer + mask
-        for (((&gray, &bg), case), is_changed) in gray_buffer
+        // 3. Background subtraction: pixels that changed enough go into the mask
+        for ((&gray, &bg), is_changed) in gray_buffer
             .iter()
             .zip(background.iter())
-            .zip(buffer.iter_mut())
             .zip(mask.iter_mut())
         {
-            *case = diff_threshold(gray.abs_diff(bg), threshold);
-            *is_changed = *case != 0; // white pixel = changed
+            *is_changed = gray.abs_diff(bg) >= threshold;
         }
 
         // 4. Group changed pixels into regions, small ones are filtered out as noise
@@ -169,16 +172,6 @@ fn main() -> Result<()> {
 fn from_u8_gray(r: u8, g: u8, b: u8) -> u8 {
     let gray = 0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b);
     gray.round() as u8
-}
-
-// white if the pixel changed enough compared to the background, black otherwise
-fn diff_threshold(diff: u8, threshold: u8) -> u32 {
-    // >= makes the threshold inclusive
-    if diff >= threshold {
-        0x00FF_FFFF // white
-    } else {
-        0 // black
-    }
 }
 
 #[cfg(test)]

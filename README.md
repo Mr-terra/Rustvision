@@ -12,7 +12,7 @@ The project is a learning exercise. The goal is not the code itself but the unde
 - Tracks each region across frames, keeps a stable identifier per object, and copes with objects that leave the frame, get occluded, or cross each other.
 - Draws a box, a centre cross and an identifier per track, coloured by state.
 
-<!-- Suggested: add a screenshot or short GIF of the tracker here, e.g. docs/demo.gif -->
+![Demo: Rustvision tracking a moving object from a webcam](docs/demo.gif)
 
 ## Pipeline
 
