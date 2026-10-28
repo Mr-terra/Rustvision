@@ -472,7 +472,7 @@ mod tests {
         (a - b).abs() < 1e-3
     }
 
-    /// Id of the track closest to position x on the line (u64::MAX if no track)
+    /// Id of the track closest to position x on the line (`u64::MAX` if no track)
     fn closest_id(tracks: &[Track], x: f32) -> u64 {
         tracks
             .iter()
