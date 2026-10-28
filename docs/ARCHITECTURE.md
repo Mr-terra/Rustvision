@@ -9,7 +9,7 @@ camera ──► RGB buffer ──► grayscale buffer ──► change mask ─
   (nokhwa)     (reused)         (reused)           (reused)     (blobs)     (tracks)      (0RGB, reused)    (minifb)
 ```
 
-Everything that is allocated lives outside the main loop. Each frame reuses the same buffers, so the loop itself does not allocate.
+Everything that is allocated lives outside the main loop. Each frame reuses the same buffers, so the loop is written not to allocate. This has not been measured with a profiler.
 
 ## Modules
 

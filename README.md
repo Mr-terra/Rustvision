@@ -46,9 +46,9 @@ Notable decisions:
 
 ## Engineering choices
 
-- **No allocation in the hot loop.** Buffers (RGB frame, grayscale, background, mask, queue, track list, matching work arrays) are allocated once before the loop and reused. Camera frames are decoded into an existing buffer.
-- **No `unwrap()` on runtime paths.** Errors are propagated with `Result`. The camera counts consecutive failures against a one-second timeout: a single failed frame is skipped, and a disconnected camera ends the program with a clear message instead of a panic.
-- **Panic-free drawing.** Boxes are clipped to the image, and pixel writes are bounds-checked. Arithmetic that can overflow on extreme coordinates saturates.
+- **Buffers allocated once.** The frame, grayscale, background, mask, queue, track list and matching work arrays are allocated before the loop and reused. Camera frames are decoded into an existing buffer. The code is written so the loop does not allocate; this has not been measured with a profiler.
+- **No `unwrap()` in the program's code.** The one `expect()` (in `blobs.rs`) relies on a check made at startup in `main.rs`. Errors are propagated with `Result`. The camera counts consecutive failures against a one-second timeout: a single failed frame is skipped, and a disconnected camera ends the program with a clear message.
+- **Bounds-checked drawing.** Boxes are clipped to the image, and pixel writes are checked. Out-of-frame tracks are covered by unit tests. Coordinate arithmetic in the drawing code saturates instead of overflowing.
 - **Decisions as pure functions.** The camera-timeout decision is a function of elapsed time only, so it is unit-tested without a camera or a wait.
 - **Lints.** The code is checked with `cargo clippy -- -W clippy::pedantic`. Each `allow` attribute that remains has a comment explaining why.
 
@@ -85,6 +85,7 @@ cargo test
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how a frame goes through the pipeline, the track states, the overlap logic and the constants.
 - [docs/AI_USAGE.md](docs/AI_USAGE.md): how the AI assistant was set up and used, and what it did and did not write.
+- [docs/ROADMAP.md](docs/ROADMAP.md): planned improvements, in priority order, with the condition for each to be done.
 - `cargo doc --open`: API documentation generated from the code comments.
 
 ## Project structure
@@ -101,6 +102,18 @@ src/
 
 The target architecture also has a `capture.rs` module; capture still lives in `main.rs` for now.
 
+## Where this approach fits
+
+Background subtraction suits a fixed camera watching a scene with stable lighting, where the things of interest are the moving parts. An industrial conveyor is a typical case: the belt and the frame stay still, and the items move across the view.
+
+It is not suited to:
+
+- recognising what an object is, or classifying defects (this needs a learned model);
+- detecting parts that stop moving on the line;
+- scenes with people, shadows or lighting that changes often, unless the background is updated.
+
+Showing this boundary is deliberate: it is the reason a learned detector would be the next step for classification.
+
 ## Development process
 
 The project was built in milestones, each one validated before the next began:
@@ -110,7 +123,7 @@ The project was built in milestones, each one validated before the next began:
 3. Background subtraction
 4. Connected components and bounding boxes
 5. Frame-to-frame tracking with stable identifiers
-6. Robustness: partial occlusion, leaving the frame, camera failure, without panics
+6. Robustness: partial occlusion, leaving the frame, camera failure, handled without panics on the tested paths (the camera unplug itself was only simulated)
 
 The history in `git log` shows the progression. The rule for each milestone was that the author must be able to explain how it works without re-reading the code.
 
@@ -133,6 +146,7 @@ This README was drafted with AI assistance from the project's own code and histo
 
 - **Identical-size bounces** can swap identifiers (see above).
 - **Two similar objects crossing** remain a hard case: the tracker relies on size and position only.
+- **Detects motion, not objects.** The tracker does not know what a region is: a person, a shadow and a reflection are treated alike when they move. An object that stands still becomes part of the background and disappears. A learned detector (such as YOLO) would lift these limits, at the cost of labelled training data and more computing power.
 - **Fixed background**: a lighting change degrades detection until the background is recaptured.
 - **Thresholds were tuned on examples**, not on a recorded test sequence.
 - **Camera disconnection** was tested by disabling the device in Device Manager, not by physically unplugging it.
