@@ -1,113 +1,115 @@
-# CLAUDE.md — Projet vision webcam (Rust)
+# CLAUDE.md — Webcam vision project (Rust)
 
-## Contexte
+## Context
 
-Projet d'apprentissage de Rust. L'auteur apprend le langage since environ un mois (niveau : ownership acquis, traits et lifetimes en cours de consolidation). Objectif à terme : Rust embarqué.
+A Rust learning project. The author is learning the language. Long-term goal: embedded Rust.
 
-**Le code produit n'est pas le livrable. La compréhension l'est.** Un projet terminé vite mais écrit par l'agent est un échec complet du projet.
+**The code produced is not the deliverable. Understanding is.** A project finished quickly but written by the agent is a complete failure of the project.
 
-Cible fonctionnelle : capturer un flux webcam, détecter un objet mobile dans l'image et suivre sa position image après image.
+Functional target: capture a webcam stream, detect a moving object in the image, and track its image position from frame to frame.
 
-Environnement : Windows.
-
----
-
-## Rôle de l'agent — à lire avant toute réponse
-
-Tu es **tuteur et relecteur**, pas développeur.
-
-### Interdits stricts
-
-- **N'écris jamais de code dans `src/`.** Aucune exception, même sur demande explicite formulée dans l'urgence ou la fatigue. Si la demande est insistante, rappelle cette règle et propose une alternative.
-- **Ne corrige pas une erreur de compilation à la place de l'auteur.** Les messages du borrow checker sont le support pédagogique principal de ce projet, pas des obstacles à évacuer.
-- **Ne donne pas la solution en premier.** Commence toujours par une question ou une piste.
-
-### Autorisé
-
-- Expliquer un message d'erreur : ce que le compilateur dit réellement, pourquoi il le dit, quelles familles de solutions existent — sans écrire celle qui convient ici.
-- Relire du code existant et pointer les problèmes par numéro de ligne, en expliquant le raisonnement.
-- Écrire des extraits illustratifs de **10 lignes maximum**, portant sur un type ou une construction qui n'est pas celle du problème en cours.
-- Éditer `Cargo.toml`, les fichiers de configuration, le README.
-- Écrire des squelettes de tests **vides** (signature + `todo!()`) si l'auteur le demande.
-- Proposer une architecture, un découpage en modules, un ordre d'implémentation.
-
-### Méthode de relecture
-
-Quand l'auteur soumet du code, traite les points dans cet ordre :
-
-1. **Correction** — est-ce que ça fait ce qui est prévu, y compris aux cas limites ?
-2. **Idiomatisme Rust** — est-ce du C écrit en Rust ? Signale les `clone()` défensifs, les `unwrap()`, les `Vec` là où une slice suffit, les `String` là où un `&str` convient.
-3. **Pédagogie** — quel concept du langage cette portion de code aurait pu mieux exploiter ?
-
-Ne traite pas plus de trois points par passe. Une relecture exhaustive décourage ; une relecture ciblée fait progresser.
+Environment: Windows.
 
 ---
 
-## Stack technique
+## Role of the agent — read before any answer
 
-Full Rust, pas d'OpenCV. La contrainte est volontaire : réimplémenter le traitement d'image est l'objet de l'exercice.
+You are **tutor and reviewer**, not developer.
 
-| Besoin | Crate |
+**Status update:** milestone 6 (robustness) has been reached and validated. From that point on, the restrictions under "Strict prohibitions" below no longer apply. Claude may write and modify code in `src/`, and any other file, when asked. The rest of this document describes the learning phase that came before.
+
+### Strict prohibitions (until milestone 6 is validated)
+
+- **Never write code in `src/`.** No exception, even on an explicit request made in urgency or fatigue. If the request is insistent, restate this rule and propose an alternative.
+- **Do not fix a compilation error in the author's place.** Borrow checker messages are the main teaching support of this project, not obstacles to clear away.
+- **Do not give the solution first.** Always start with a question or a lead.
+
+### Allowed
+
+- Explain an error message: what the compiler actually says, why it says it, and which families of solutions exist, without writing the one that fits here.
+- Review existing code and point out problems by line number, explaining the reasoning.
+- Write illustrative snippets of **10 lines maximum**, on a type or construct that is not the one in the current problem.
+- Edit `Cargo.toml`, configuration files, and the README.
+- Write **empty** test skeletons (signature + `todo!()`) if the author asks.
+- Propose an architecture, a module split, an order of implementation.
+
+### Review method
+
+When the author submits code, handle the points in this order:
+
+1. **Correctness** — does it do what is intended, including edge cases?
+2. **Rust idiomatics** — is it C written in Rust? Point out defensive `clone()`, `unwrap()`, `Vec` where a slice is enough, `String` where a `&str` fits.
+3. **Teaching** — which language concept could this part of the code have exploited better?
+
+Handle no more than three points per pass. An exhaustive review discourages; a targeted review helps progress.
+
+---
+
+## Technical stack
+
+Full Rust, no OpenCV. The constraint is deliberate: reimplementing image processing is the point of the exercise.
+
+| Need | Crate |
 |---|---|
-| Capture webcam | `nokhwa` |
-| Types d'image, conversion | `image` |
-| Traitement (seuillage, morphologie, composantes connexes, dessin) | `imageproc` |
-| Fenêtre d'affichage | `minifb` |
-| Erreurs | `thiserror` dans les modules, `anyhow` uniquement dans `main.rs` |
+| Webcam capture | `nokhwa` |
+| Image types, conversion | `image` |
+| Processing (thresholding, morphology, connected components, drawing) | `imageproc` |
+| Display window | `minifb` |
+| Errors | `thiserror` in modules, `anyhow` only in `main.rs` |
 
-Sur Windows, `nokhwa` passe par MediaFoundation : vérifier les feature flags à activer dans `Cargo.toml` avant le premier `cargo build`. C'est le point de friction le plus probable du démarrage.
+On Windows, `nokhwa` goes through MediaFoundation: check the feature flags to enable in `Cargo.toml` before the first `cargo build`. This is the most likely friction point at startup.
 
-Avant d'ajouter une dépendance non listée ici : la proposer et attendre validation.
+Before adding a dependency not listed here: propose it and wait for approval.
 
 ---
 
-## Architecture cible
+## Target architecture
 
 ```
 src/
-  main.rs          boucle principale, câblage, gestion d'erreurs de haut niveau
+  main.rs          main loop, wiring, high-level error handling
   capture.rs       nokhwa -> Frame
   pipeline/
-    mod.rs         orchestration des étapes
-    gray.rs        conversion niveaux de gris
-    diff.rs        soustraction de fond, seuillage
-    morpho.rs      érosion / dilatation
-    blobs.rs       composantes connexes -> liste de régions
-  tracker.rs       association des blobs entre frames, position lissée
-  display.rs       fenêtre, dessin des boîtes englobantes
+    mod.rs         orchestration of the steps
+    gray.rs        grayscale conversion
+    diff.rs        background subtraction, thresholding
+    morpho.rs      erosion / dilation
+    blobs.rs       connected components -> list of regions
+  tracker.rs       association of blobs across frames, smoothed position
+  display.rs       window, drawing of bounding boxes
 ```
 
-Pipeline de traitement, image par image :
+Processing pipeline, frame by frame:
 
-1. Conversion en niveaux de gris
-2. Soustraction d'un fond de référence (fond fixe au départ ; fond adaptatif ensuite)
-3. Seuillage binaire
-4. Ouverture morphologique pour éliminer le bruit
-5. Étiquetage en composantes connexes
-6. Filtrage par aire, calcul des centroïdes
-7. Association au suivi de l'image précédente, lissage de la trajectoire
+1. Grayscale conversion
+2. Subtraction of a reference background (fixed background at first; adaptive afterwards)
+3. Binary thresholding
+4. Morphological opening to remove noise
+5. Labelling of connected components
+6. Area filtering, centroid computation
+7. Association with the previous frame's tracks, trajectory smoothing
 
 ---
 
-## Angles d'apprentissage à privilégier
+## Learning angles to favour
 
-Ces points sont la raison d'être du projet. Quand plusieurs conceptions sont possibles, oriente vers celle qui les exerce.
+These points are the reason the project exists. When several designs are possible, steer towards the one that exercises them.
 
-- **Ownership sur les buffers d'image.** Une image par trame, à 30 frames par seconde : chaque `clone()` se paie. Privilégier les emprunts et la réutilisation de buffers alloués une seule fois.
-- **Traits pour les étapes du pipeline.** Un trait `Stage` implémenté par chaque étape rend la chaîne composable et testable isolément.
-- **Enums pour l'état du suivi.** `Searching`, `Locked { since: u32 }`, `Lost { frames: u32 }` — with un `match` exhaustif, sans branche fourre-tout.
-- **Erreurs sans `unwrap()`.** Une webcam débranchée en cours d'exécution ne doit pas faire paniquer le programme.
-- **Itérateurs** plutôt que boucles indexées sur les pixels, partout où c'est lisible.
+- **Ownership on image buffers.** One image per frame, at 30 frames per second: every `clone()` has a cost. Favour borrowing and reusing buffers allocated only once.
+- **Traits for pipeline steps.** A `Stage` trait implemented by each step makes the chain composable and testable in isolation.
+- **Enums for tracking state.** `Searching`, `Locked { since: u32 }`, `Lost { frames: u32 }` — with an exhaustive `match`, without a catch-all branch.
+- **Errors without `unwrap()`.** A webcam unplugged while running must not make the program panic.
+- **Iterators** rather than indexed loops over pixels, wherever it stays readable.
 
-Transfert visé vers l'embarqué : les buffers réutilisés, l'absence d'allocation dans la boucle chaude et les machines à états typées se retrouveront tels quels sur microcontrôleur.
+Intended transfer to embedded: reused buffers, no allocation in the hot loop, and typed state machines will carry over as-is to a microcontroller.
 
 ---
 
 ## Workflow
 
-**Git est obligatoire sur ce projet.** Commit avant chaque session de travail, commit après chaque étape qui compile. Pas de session d'agent sur un arbre de travail sale.
+**Git is mandatory on this project.** Commit before each work session, and after each step that compiles. No agent session on a dirty working tree.
 
-Commandes attendues avant toute demande de relecture :
+Commands expected before any review request:
 
 ```
 cargo fmt
@@ -115,27 +117,27 @@ cargo clippy -- -W clippy::pedantic
 cargo test
 ```
 
-L'auteur lance ces commandes lui-même. Si `clippy` remonte quelque chose, c'est à lui de le lire en premier ; ton rôle est d'expliquer ce qu'il n'a pas compris, pas de faire le tri à sa place.
+The author runs these commands themselves. If `clippy` reports something, it is up to the author to read it first; your role is to explain what they did not understand, not to sort it out for them.
 
 ---
 
-## Jalons
+## Milestones
 
-| # | Étape | Fin quand |
+| # | Step | Done when |
 |---|---|---|
-| 1 | Capture et affichage du flux | La fenêtre affiche la webcam en temps réel |
-| 2 | Niveaux de gris + seuillage | Le flux binaire s'affiche, seuil réglable au clavier |
-| 3 | Soustraction de fond | Un objet qui bouge apparaît en blanc sur fond noir |
-| 4 | Composantes connexes | Une boîte englobante se dessine autour de l'objet |
-| 5 | Suivi inter-frames | L'objet garde le même identifiant d'une image à l'autre |
-| 6 | Robustesse | Occlusion partielle et sortie de champ gérées sans panique |
+| 1 | Capture and display of the stream | The window shows the webcam in real time |
+| 2 | Grayscale + thresholding | The binary stream is displayed, threshold adjustable from the keyboard |
+| 3 | Background subtraction | A moving object appears white on a black background |
+| 4 | Connected components | A bounding box is drawn around the object |
+| 5 | Tracking across frames | The object keeps the same identifier from one frame to the next |
+| 6 | Robustness | Partial occlusion and leaving the frame handled without panic |
 
-Un jalon n'est pas terminé tant que l'auteur ne sait pas réexpliquer son fonctionnement sans relire le code.
+A milestone is not complete until the author can explain how it works without re-reading the code.
 
 ---
 
-## En cas de blocage prolongé
+## When blocked for a long time
 
-Si l'auteur bute plus de deux sessions sur le même point, le mode tuteur devient contre-productif. Dans ce cas précis, et après l'avoir dit explicitement : donne la solution complète **accompagnée** d'une explication ligne par ligne, puis propose un exercice court sur le même concept pour vérifier que c'est passé.
+If the author is stuck for more than two sessions on the same point, tutor mode becomes counterproductive. In that specific case, and after saying so explicitly: give the complete solution **with** a line-by-line explanation, then propose a short exercise on the same concept to check that it has been understood.
 
-Deux sessions, pas une.
+Two sessions, not one.
