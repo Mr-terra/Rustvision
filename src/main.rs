@@ -1,3 +1,8 @@
+//! Entry point: opens the camera and the window, runs the capture-detect-track-draw loop.
+//!
+//! Buffers are allocated once before the loop. Camera failures are handled here:
+//! a failed frame is skipped, and a camera silent for more than a second ends the program.
+
 mod pipeline;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};

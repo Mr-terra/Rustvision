@@ -81,6 +81,12 @@ cargo clippy -- -W clippy::pedantic
 cargo test
 ```
 
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how a frame goes through the pipeline, the track states, the overlap logic and the constants.
+- [docs/AI_USAGE.md](docs/AI_USAGE.md): how the AI assistant was set up and used, and what it did and did not write.
+- `cargo doc --open`: API documentation generated from the code comments.
+
 ## Project structure
 
 ```

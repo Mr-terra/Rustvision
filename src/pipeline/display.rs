@@ -1,3 +1,8 @@
+//! Drawing: boxes, centre crosses and identifiers, written into the display buffer.
+//!
+//! Every write is bounds-checked or clamped, so a track outside the image is
+//! clipped or skipped, never a panic.
+
 use super::tracker::{Track, TrackState};
 
 const COLOR_SEARCH: u32 = 0x00FF_FF00; // yellow

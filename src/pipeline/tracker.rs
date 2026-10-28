@@ -1,3 +1,7 @@
+//! Frame-to-frame tracking: prediction, matching, track states and overlaps.
+//!
+//! See `docs/ARCHITECTURE.md` for the state diagram and the list of constants.
+
 use super::blobs::Region;
 
 /// Maximum distance (pixels) between a prediction and a detection to associate them.

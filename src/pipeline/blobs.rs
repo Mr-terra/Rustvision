@@ -1,3 +1,8 @@
+//! Connected components: turns the change mask into regions.
+//!
+//! The mask is consumed by the flood fill, so every pixel is cleared at the end.
+//! The queue and the mask are passed in, so nothing is allocated per frame.
+
 use std::collections::VecDeque;
 
 /// Bounding box, area and centroid of a connected component.
