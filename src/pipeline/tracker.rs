@@ -541,7 +541,7 @@ mod tests {
         assert_eq!(t.tracks()[0].state, TrackState::Lost { frames: MAX_LOST });
 
         t.update(&[]);
-        assert!(t.tracks().is_empty());
+        assert_eq!(t.tracks(), []);
 
         t.update(&[det(100, 100)]);
         assert_eq!(t.tracks()[0].id, 1);

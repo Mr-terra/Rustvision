@@ -107,7 +107,9 @@ fn main() -> Result<()> {
 
         // 1. RGB -> grayscale for detection, RGB -> 0RGB for the display, 3 bytes at a time
         for ((rgb, gray), pixel) in rgb_buffer
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .zip(gray_buffer.iter_mut())
             .zip(buffer.iter_mut())
         {
