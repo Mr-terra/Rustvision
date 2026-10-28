@@ -93,6 +93,7 @@ fn main() -> Result<()> {
                 }
                 CaptureAction::SkipFrame => {
                     new_window.update(); // keep the window responsive
+                    std::thread::sleep(Duration::from_millis(30)); // ~one frame period, avoids a busy loop
                     continue;
                 }
             }
@@ -187,7 +188,10 @@ mod tests {
     #[test]
     fn short_failure_skips_the_frame() {
         assert_eq!(on_capture_error(Duration::ZERO), CaptureAction::SkipFrame);
-        assert_eq!(on_capture_error(Duration::from_millis(500)), CaptureAction::SkipFrame);
+        assert_eq!(
+            on_capture_error(Duration::from_millis(500)),
+            CaptureAction::SkipFrame
+        );
     }
 
     #[test]
@@ -198,6 +202,9 @@ mod tests {
 
     #[test]
     fn long_failure_exits() {
-        assert_eq!(on_capture_error(Duration::from_millis(1500)), CaptureAction::Exit);
+        assert_eq!(
+            on_capture_error(Duration::from_millis(1500)),
+            CaptureAction::Exit
+        );
     }
 }

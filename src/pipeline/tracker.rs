@@ -31,10 +31,17 @@ const SIZE_WEIGHT_AFTER_OVERLAP: f32 = 4.0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackState {
     Recherche,
-    Verrouille { depuis: u32 },
-    Perdu { images: u32 },
+    Verrouille {
+        depuis: u32,
+    },
+    Perdu {
+        images: u32,
+    },
     /// Merged with the track `avec`: ignores detections, moves at constant velocity.
-    Recouvrement { images: u32, avec: u64 },
+    Recouvrement {
+        images: u32,
+        avec: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -317,8 +324,14 @@ impl Tracker {
                     && self.nearest[i] == self.nearest[j]
                 {
                     let ids = (a.id, b.id);
-                    self.tracks[i].state = TrackState::Recouvrement { images: 0, avec: ids.1 };
-                    self.tracks[j].state = TrackState::Recouvrement { images: 0, avec: ids.0 };
+                    self.tracks[i].state = TrackState::Recouvrement {
+                        images: 0,
+                        avec: ids.1,
+                    };
+                    self.tracks[j].state = TrackState::Recouvrement {
+                        images: 0,
+                        avec: ids.0,
+                    };
                 }
             }
         }
@@ -380,7 +393,9 @@ impl Tracker {
             }
             match track.state {
                 TrackState::Recouvrement { .. } => track.on_overlap(),
-                TrackState::Recherche | TrackState::Verrouille { .. } | TrackState::Perdu { .. } => {
+                TrackState::Recherche
+                | TrackState::Verrouille { .. }
+                | TrackState::Perdu { .. } => {
                     track.on_miss();
                 }
             }
@@ -550,11 +565,16 @@ mod tests {
         for step in 0u16..=45 {
             t.update(&scene(100 + 2 * step, 10, 240 - 2 * step, 10));
             if step == 35 {
-                assert_eq!(t.tracks().len(), 2, "the merged region must not create a track");
-                assert!(t
-                    .tracks()
-                    .iter()
-                    .all(|tr| matches!(tr.state, TrackState::Recouvrement { .. })));
+                assert_eq!(
+                    t.tracks().len(),
+                    2,
+                    "the merged region must not create a track"
+                );
+                assert!(
+                    t.tracks()
+                        .iter()
+                        .all(|tr| matches!(tr.state, TrackState::Recouvrement { .. }))
+                );
             }
         }
         let tr = t.tracks();
@@ -599,8 +619,16 @@ mod tests {
         let tr = t.tracks();
         assert_eq!(tr.len(), 2, "no new track must be created");
         // At step 36, A is back at 172 and B at 208: the identities have swapped
-        assert_eq!(closest_id(tr, 208.0), 0, "id 0 must follow B after the swap");
-        assert_eq!(closest_id(tr, 172.0), 1, "id 1 must follow A after the swap");
+        assert_eq!(
+            closest_id(tr, 208.0),
+            0,
+            "id 0 must follow B after the swap"
+        );
+        assert_eq!(
+            closest_id(tr, 172.0),
+            1,
+            "id 1 must follow A after the swap"
+        );
     }
 
     #[test]
@@ -625,10 +653,11 @@ mod tests {
             let s = step.min(29);
             t.update(&scene(100 + 3 * s, 10, 280 - 3 * s, 10));
             if step == 33 {
-                assert!(t
-                    .tracks()
-                    .iter()
-                    .all(|tr| matches!(tr.state, TrackState::Recouvrement { .. })));
+                assert!(
+                    t.tracks()
+                        .iter()
+                        .all(|tr| matches!(tr.state, TrackState::Recouvrement { .. }))
+                );
             }
         }
         let tr = t.tracks();

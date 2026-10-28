@@ -220,6 +220,9 @@ mod tests {
     #[test]
     fn box_partly_outside_is_clamped() {
         // Centre at -1 px, half size 5: the box is clamped to x in [0, 4]
-        assert_eq!(track_bounds(&track_at(-1.0, 20.0), W, H), Some((0, 15, 4, 25)));
+        assert_eq!(
+            track_bounds(&track_at(-1.0, 20.0), W, H),
+            Some((0, 15, 4, 25))
+        );
     }
 }
