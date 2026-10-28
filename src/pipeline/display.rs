@@ -38,10 +38,10 @@ pub fn draw_tracks(buffer: &mut [u32], width: usize, height: usize, tracks: &[Tr
 
 fn state_color(state: TrackState) -> u32 {
     match state {
-        TrackState::Recherche => COLOR_SEARCH,
-        TrackState::Verrouille { .. } => COLOR_LOCKED,
-        TrackState::Perdu { .. } => COLOR_LOST,
-        TrackState::Recouvrement { .. } => COLOR_OVERLAP,
+        TrackState::Searching => COLOR_SEARCH,
+        TrackState::Locked { .. } => COLOR_LOCKED,
+        TrackState::Lost { .. } => COLOR_LOST,
+        TrackState::Overlap { .. } => COLOR_OVERLAP,
     }
 }
 

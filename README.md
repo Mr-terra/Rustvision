@@ -31,16 +31,16 @@ Each track is a small state machine, represented as a Rust `enum` and matched ex
 
 | State | Colour | Meaning |
 |---|---|---|
-| `Recherche` | yellow | New track, not yet confirmed (must match several frames in a row) |
-| `Verrouille` | green | Confirmed track, matched to a detection on each frame |
-| `Perdu` | red | No detection for a while: the track coasts on its velocity, then is deleted |
-| `Recouvrement` | orange | Two tracks overlap inside a single region: they ignore that region and keep their size |
+| `Searching` | yellow | New track, not yet confirmed (must match several frames in a row) |
+| `Locked` | green | Confirmed track, matched to a detection on each frame |
+| `Lost` | red | No detection for a while: the track coasts on its velocity, then is deleted |
+| `Overlap` | orange | Two tracks overlap inside a single region: they ignore that region and keep their size |
 
 Notable decisions:
 
 - **Identifiers are never reused.** A deleted track's identifier is not given to a new object, so a stale ID cannot silently attach to the wrong object.
 - **Matching is global, not per track.** Candidate pairs are sorted by cost and accepted greedily, so one detection is never claimed by two tracks, and the result does not depend on detection order (tested).
-- **Overlaps are handled explicitly.** When two predicted boxes touch and a single region covers them, both tracks enter `Recouvrement`. Their size history is frozen so the merged region does not corrupt it. A separation is recognised when two distinct regions reappear close to the two predictions. If the overlap lasts more than five frames, the normal path resumes and one track is lost rather than given the wrong object.
+- **Overlaps are handled explicitly.** When two predicted boxes touch and a single region covers them, both tracks enter `Overlap`. Their size history is frozen so the merged region does not corrupt it. A separation is recognised when two distinct regions reappear close to the two predictions. If the overlap lasts more than five frames, the normal path resumes and one track is lost rather than given the wrong object.
 - **Size breaks ties at separation.** Position alone cannot tell a bounce from a crossing. Right after separation, the relative change of each region's size against its track's size history gets extra weight in the matching cost, and returns to normal on the next frame.
 - **Known limit.** Two objects of identical size that bounce off each other can swap identifiers. The test suite documents this case as expected behaviour rather than hiding it.
 

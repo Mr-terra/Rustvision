@@ -6,7 +6,7 @@ pub const MAX_DIST: f32 = 50.0;
 pub const MAX_TRACKS: usize = 32;
 pub const MAX_DETECTIONS: usize = 64;
 
-/// Consecutive matches needed to go from Recherche to Verrouille.
+/// Consecutive matches needed to go from Searching to Locked.
 const LOCK_HITS: u32 = 3;
 /// Missed frames before deleting a confirmed track (~1 s at 30 fps).
 const MAX_LOST: u32 = 30;
@@ -20,27 +20,27 @@ const BETA: f32 = 0.3;
 const DAMPING: f32 = 0.9;
 /// Number of areas kept per track (circular buffer).
 const AREA_HISTORY: usize = 4;
-/// Frames spent in Recouvrement before falling back to the normal path.
+/// Frames spent in Overlap before falling back to the normal path.
 const MAX_OVERLAP: u32 = 5;
 /// Weight of the size term in the matching cost, in normal tracking.
 const SIZE_WEIGHT: f32 = 0.5;
-/// Weight of the size term for a track that has just left Recouvrement:
+/// Weight of the size term for a track that has just left Overlap:
 /// after an occlusion the position cannot tell a bounce from a crossing, the size can.
 const SIZE_WEIGHT_AFTER_OVERLAP: f32 = 4.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackState {
-    Recherche,
-    Verrouille {
-        depuis: u32,
+    Searching,
+    Locked {
+        since: u32,
     },
-    Perdu {
-        images: u32,
+    Lost {
+        frames: u32,
     },
-    /// Merged with the track `avec`: ignores detections, moves at constant velocity.
-    Recouvrement {
-        images: u32,
-        avec: u64,
+    /// Merged with the track `with`: ignores detections, moves at constant velocity.
+    Overlap {
+        frames: u32,
+        with: u64,
     },
 }
 
@@ -57,11 +57,11 @@ pub struct Track {
     pub half_h: f32,
     vx: f32,
     vy: f32,
-    /// Consecutive matches while in Recherche.
+    /// Consecutive matches while in Searching.
     hits: u32,
-    /// True once the track has reached Verrouille at least once.
+    /// True once the track has reached Locked at least once.
     confirmed: bool,
-    /// Last matched areas (circular buffer), frozen during Recouvrement.
+    /// Last matched areas (circular buffer), frozen during Overlap.
     areas: [usize; AREA_HISTORY],
     /// Next slot to overwrite: always the oldest value.
     area_head: usize,
@@ -71,7 +71,7 @@ impl Track {
     fn new(id: u64, det: &Region) -> Self {
         Self {
             id,
-            state: TrackState::Recherche,
+            state: TrackState::Searching,
             x: det.cx,
             y: det.cy,
             half_w: half_extent(det.min_x, det.max_x),
@@ -139,25 +139,25 @@ impl Track {
 
         let state = self.state;
         self.state = match state {
-            TrackState::Recherche => {
+            TrackState::Searching => {
                 self.hits += 1;
                 if self.hits >= LOCK_HITS {
                     self.confirmed = true;
-                    TrackState::Verrouille { depuis: 0 }
+                    TrackState::Locked { since: 0 }
                 } else {
-                    TrackState::Recherche
+                    TrackState::Searching
                 }
             }
-            TrackState::Verrouille { depuis } => TrackState::Verrouille {
-                depuis: depuis.saturating_add(1),
+            TrackState::Locked { since } => TrackState::Locked {
+                since: since.saturating_add(1),
             },
-            // Recouvrement never gets a pair; same exit as Perdu, as a safety net
-            TrackState::Perdu { .. } | TrackState::Recouvrement { .. } => {
+            // Overlap never gets a pair; same exit as Lost, as a safety net
+            TrackState::Lost { .. } | TrackState::Overlap { .. } => {
                 if self.confirmed {
-                    TrackState::Verrouille { depuis: 0 }
+                    TrackState::Locked { since: 0 }
                 } else {
                     self.hits = 1;
-                    TrackState::Recherche
+                    TrackState::Searching
                 }
             }
         };
@@ -173,52 +173,50 @@ impl Track {
 
         let state = self.state;
         self.state = match state {
-            // Recouvrement goes through on_overlap; Perdu rather than a panic if it ever gets here
-            TrackState::Recherche
-            | TrackState::Verrouille { .. }
-            | TrackState::Recouvrement { .. } => TrackState::Perdu { images: 1 },
-            TrackState::Perdu { images } => TrackState::Perdu {
-                images: images.saturating_add(1),
+            // Overlap goes through on_overlap; Lost rather than a panic if it ever gets here
+            TrackState::Searching | TrackState::Locked { .. } | TrackState::Overlap { .. } => {
+                TrackState::Lost { frames: 1 }
+            }
+            TrackState::Lost { frames } => TrackState::Lost {
+                frames: frames.saturating_add(1),
             },
         };
     }
 
-    /// Called for a track in Recouvrement: constant velocity, no damping,
+    /// Called for a track in Overlap: constant velocity, no damping,
     /// size and area history untouched (the merged region would corrupt them).
     fn on_overlap(&mut self) {
         self.x += self.vx;
         self.y += self.vy;
-        if let TrackState::Recouvrement { images, avec } = self.state {
-            self.state = TrackState::Recouvrement {
-                images: images.saturating_add(1),
-                avec,
+        if let TrackState::Overlap { frames, with } = self.state {
+            self.state = TrackState::Overlap {
+                frames: frames.saturating_add(1),
+                with,
             };
         }
     }
 
-    /// State after a separation (same rule as leaving Perdu).
+    /// State after a separation (same rule as leaving Lost).
     fn resume(&mut self) {
         self.state = if self.confirmed {
-            TrackState::Verrouille { depuis: 0 }
+            TrackState::Locked { since: 0 }
         } else {
             self.hits = 1;
-            TrackState::Recherche
+            TrackState::Searching
         };
     }
 
     fn is_dead(&self) -> bool {
         match self.state {
-            // Recouvrement: the overlap counter decides, not the lost counter
-            TrackState::Recherche
-            | TrackState::Verrouille { .. }
-            | TrackState::Recouvrement { .. } => false,
-            TrackState::Perdu { images } => {
+            // Overlap: the overlap counter decides, not the lost counter
+            TrackState::Searching | TrackState::Locked { .. } | TrackState::Overlap { .. } => false,
+            TrackState::Lost { frames } => {
                 let limit = if self.confirmed {
                     MAX_LOST
                 } else {
                     MAX_LOST_TENTATIVE
                 };
-                images > limit
+                frames > limit
             }
         }
     }
@@ -281,7 +279,7 @@ impl Tracker {
         }
     }
 
-    /// Enters, leaves or keeps the Recouvrement state, before any matching.
+    /// Enters, leaves or keeps the Overlap state, before any matching.
     /// Needs `self.nearest` filled for the current frame.
     #[allow(clippy::needless_range_loop)] // a track reads its partner while being modified
     fn update_overlaps(&mut self) {
@@ -291,10 +289,10 @@ impl Tracker {
 
         // Tracks already merged: a separation wins over the time limit
         for ti in 0..n {
-            let TrackState::Recouvrement { images, avec } = self.tracks[ti].state else {
+            let TrackState::Overlap { frames, with } = self.tracks[ti].state else {
                 continue;
             };
-            let separated = match self.tracks.iter().position(|t| t.id == avec) {
+            let separated = match self.tracks.iter().position(|t| t.id == with) {
                 None => true, // partner deleted: nothing left to wait for
                 Some(pi) => {
                     self.nearest[ti].is_some()
@@ -305,9 +303,9 @@ impl Tracker {
             if separated {
                 self.tracks[ti].resume();
                 self.size_weight[ti] = SIZE_WEIGHT_AFTER_OVERLAP;
-            } else if images >= MAX_OVERLAP {
+            } else if frames >= MAX_OVERLAP {
                 // Too long: back to the normal path, even if the track ends up lost
-                self.tracks[ti].state = TrackState::Perdu { images };
+                self.tracks[ti].state = TrackState::Lost { frames };
             }
         }
 
@@ -316,21 +314,21 @@ impl Tracker {
         for i in 0..n {
             for j in i + 1..n {
                 let (a, b) = (&self.tracks[i], &self.tracks[j]);
-                let both_locked = matches!(a.state, TrackState::Verrouille { .. })
-                    && matches!(b.state, TrackState::Verrouille { .. });
+                let both_locked = matches!(a.state, TrackState::Locked { .. })
+                    && matches!(b.state, TrackState::Locked { .. });
                 if both_locked
                     && a.touches(b)
                     && self.nearest[i].is_some()
                     && self.nearest[i] == self.nearest[j]
                 {
                     let ids = (a.id, b.id);
-                    self.tracks[i].state = TrackState::Recouvrement {
-                        images: 0,
-                        avec: ids.1,
+                    self.tracks[i].state = TrackState::Overlap {
+                        frames: 0,
+                        with: ids.1,
                     };
-                    self.tracks[j].state = TrackState::Recouvrement {
-                        images: 0,
-                        avec: ids.0,
+                    self.tracks[j].state = TrackState::Overlap {
+                        frames: 0,
+                        with: ids.0,
                     };
                 }
             }
@@ -338,16 +336,16 @@ impl Tracker {
     }
 
     pub fn update(&mut self, detections: &[Region]) {
-        // 0. Recouvrement: decided before the matching
+        // 0. Overlap: decided before the matching
         self.find_nearest(detections);
         self.update_overlaps();
 
         // 1. Candidate pairs: cost without unit, gated by the max distance.
-        //    Tracks in Recouvrement ignore detections: no pair for them.
+        //    Tracks in Overlap ignore detections: no pair for them.
         let max_d2 = MAX_DIST * MAX_DIST;
         self.pairs.clear();
         for (ti, track) in self.tracks.iter().enumerate() {
-            if matches!(track.state, TrackState::Recouvrement { .. }) {
+            if matches!(track.state, TrackState::Overlap { .. }) {
                 continue;
             }
             let (px, py) = track.predicted();
@@ -378,10 +376,10 @@ impl Tracker {
             self.tracks[ti].on_hit(&detections[di]);
         }
 
-        // 3b. The merged region of a track in Recouvrement is marked as taken,
+        // 3b. The merged region of a track in Overlap is marked as taken,
         //     otherwise step 6 would create a new track for it
         for (ti, track) in self.tracks.iter().enumerate() {
-            if let (TrackState::Recouvrement { .. }, Some(di)) = (track.state, self.nearest[ti]) {
+            if let (TrackState::Overlap { .. }, Some(di)) = (track.state, self.nearest[ti]) {
                 self.det_used[di] = true;
             }
         }
@@ -392,10 +390,8 @@ impl Tracker {
                 continue;
             }
             match track.state {
-                TrackState::Recouvrement { .. } => track.on_overlap(),
-                TrackState::Recherche
-                | TrackState::Verrouille { .. }
-                | TrackState::Perdu { .. } => {
+                TrackState::Overlap { .. } => track.on_overlap(),
+                TrackState::Searching | TrackState::Locked { .. } | TrackState::Lost { .. } => {
                     track.on_miss();
                 }
             }
@@ -511,9 +507,9 @@ mod tests {
         t.update(&[det(300, 100)]);
         let tr = t.tracks();
         assert_eq!(tr.len(), 2);
-        assert_eq!(tr[0].state, TrackState::Perdu { images: 1 });
+        assert_eq!(tr[0].state, TrackState::Lost { frames: 1 });
         assert_eq!(tr[1].id, 1);
-        assert_eq!(tr[1].state, TrackState::Recherche);
+        assert_eq!(tr[1].state, TrackState::Searching);
     }
 
     #[test]
@@ -521,12 +517,12 @@ mod tests {
         let mut t = Tracker::new();
         for _ in 0..LOCK_HITS - 1 {
             t.update(&[det(100, 100)]);
-            assert_eq!(t.tracks()[0].state, TrackState::Recherche);
+            assert_eq!(t.tracks()[0].state, TrackState::Searching);
         }
         t.update(&[det(100, 100)]);
-        assert_eq!(t.tracks()[0].state, TrackState::Verrouille { depuis: 0 });
+        assert_eq!(t.tracks()[0].state, TrackState::Locked { since: 0 });
         t.update(&[det(100, 100)]);
-        assert_eq!(t.tracks()[0].state, TrackState::Verrouille { depuis: 1 });
+        assert_eq!(t.tracks()[0].state, TrackState::Locked { since: 1 });
     }
 
     #[test]
@@ -538,7 +534,7 @@ mod tests {
         for _ in 0..MAX_LOST {
             t.update(&[]);
         }
-        assert_eq!(t.tracks()[0].state, TrackState::Perdu { images: MAX_LOST });
+        assert_eq!(t.tracks()[0].state, TrackState::Lost { frames: MAX_LOST });
 
         t.update(&[]);
         assert!(t.tracks().is_empty());
@@ -555,7 +551,7 @@ mod tests {
         }
         t.update(&[]);
         t.update(&[det(100, 100)]);
-        assert_eq!(t.tracks()[0].state, TrackState::Verrouille { depuis: 0 });
+        assert_eq!(t.tracks()[0].state, TrackState::Locked { since: 0 });
     }
 
     #[test]
@@ -573,7 +569,7 @@ mod tests {
                 assert!(
                     t.tracks()
                         .iter()
-                        .all(|tr| matches!(tr.state, TrackState::Recouvrement { .. }))
+                        .all(|tr| matches!(tr.state, TrackState::Overlap { .. }))
                 );
             }
         }
@@ -656,7 +652,7 @@ mod tests {
                 assert!(
                     t.tracks()
                         .iter()
-                        .all(|tr| matches!(tr.state, TrackState::Recouvrement { .. }))
+                        .all(|tr| matches!(tr.state, TrackState::Overlap { .. }))
                 );
             }
         }
@@ -665,11 +661,11 @@ mod tests {
         // After MAX_OVERLAP frames, one track takes the region again, the other is lost
         let locked = tr
             .iter()
-            .filter(|x| matches!(x.state, TrackState::Verrouille { .. }))
+            .filter(|x| matches!(x.state, TrackState::Locked { .. }))
             .count();
         let lost = tr
             .iter()
-            .filter(|x| matches!(x.state, TrackState::Perdu { .. }))
+            .filter(|x| matches!(x.state, TrackState::Lost { .. }))
             .count();
         assert_eq!((locked, lost), (1, 1));
     }

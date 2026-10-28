@@ -2,7 +2,7 @@
 
 ## Contexte
 
-Projet d'apprentissage de Rust. L'auteur apprend le langage depuis environ un mois (niveau : ownership acquis, traits et lifetimes en cours de consolidation). Objectif à terme : Rust embarqué.
+Projet d'apprentissage de Rust. L'auteur apprend le langage since environ un mois (niveau : ownership acquis, traits et lifetimes en cours de consolidation). Objectif à terme : Rust embarqué.
 
 **Le code produit n'est pas le livrable. La compréhension l'est.** Un projet terminé vite mais écrit par l'agent est un échec complet du projet.
 
@@ -73,7 +73,7 @@ src/
     diff.rs        soustraction de fond, seuillage
     morpho.rs      érosion / dilatation
     blobs.rs       composantes connexes -> liste de régions
-  tracker.rs       association des blobs entre images, position lissée
+  tracker.rs       association des blobs entre frames, position lissée
   display.rs       fenêtre, dessin des boîtes englobantes
 ```
 
@@ -93,9 +93,9 @@ Pipeline de traitement, image par image :
 
 Ces points sont la raison d'être du projet. Quand plusieurs conceptions sont possibles, oriente vers celle qui les exerce.
 
-- **Ownership sur les buffers d'image.** Une image par trame, à 30 images par seconde : chaque `clone()` se paie. Privilégier les emprunts et la réutilisation de buffers alloués une seule fois.
+- **Ownership sur les buffers d'image.** Une image par trame, à 30 frames par seconde : chaque `clone()` se paie. Privilégier les emprunts et la réutilisation de buffers alloués une seule fois.
 - **Traits pour les étapes du pipeline.** Un trait `Stage` implémenté par chaque étape rend la chaîne composable et testable isolément.
-- **Enums pour l'état du suivi.** `Recherche`, `Verrouille { depuis: u32 }`, `Perdu { images: u32 }` — avec un `match` exhaustif, sans branche fourre-tout.
+- **Enums pour l'état du suivi.** `Searching`, `Locked { since: u32 }`, `Lost { frames: u32 }` — with un `match` exhaustif, sans branche fourre-tout.
 - **Erreurs sans `unwrap()`.** Une webcam débranchée en cours d'exécution ne doit pas faire paniquer le programme.
 - **Itérateurs** plutôt que boucles indexées sur les pixels, partout où c'est lisible.
 
@@ -127,7 +127,7 @@ L'auteur lance ces commandes lui-même. Si `clippy` remonte quelque chose, c'est
 | 2 | Niveaux de gris + seuillage | Le flux binaire s'affiche, seuil réglable au clavier |
 | 3 | Soustraction de fond | Un objet qui bouge apparaît en blanc sur fond noir |
 | 4 | Composantes connexes | Une boîte englobante se dessine autour de l'objet |
-| 5 | Suivi inter-images | L'objet garde le même identifiant d'une image à l'autre |
+| 5 | Suivi inter-frames | L'objet garde le même identifiant d'une image à l'autre |
 | 6 | Robustesse | Occlusion partielle et sortie de champ gérées sans panique |
 
 Un jalon n'est pas terminé tant que l'auteur ne sait pas réexpliquer son fonctionnement sans relire le code.
