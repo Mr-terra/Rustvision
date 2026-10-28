@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    # Windows: the camera dependency (nokhwa, feature input-msmf) only builds there
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --check
+
+      - name: Lints (pedantic, warnings are errors)
+        run: cargo clippy --all-targets -- -W clippy::pedantic -D warnings
+
+      - name: Tests
+        run: cargo test
