@@ -3,6 +3,7 @@ use super::tracker::{Track, TrackState};
 const COLOR_SEARCH: u32 = 0x00FF_FF00; // yellow
 const COLOR_LOCKED: u32 = 0x0000_FF00; // green
 const COLOR_LOST: u32 = 0x00FF_0000; // red
+const COLOR_OVERLAP: u32 = 0x00FF_8800; // orange
 
 // 3x5 bitmap font for digits, one row per byte, bit 2 = left column
 const GLYPH_W: usize = 3;
@@ -40,6 +41,7 @@ fn state_color(state: TrackState) -> u32 {
         TrackState::Recherche => COLOR_SEARCH,
         TrackState::Verrouille { .. } => COLOR_LOCKED,
         TrackState::Perdu { .. } => COLOR_LOST,
+        TrackState::Recouvrement { .. } => COLOR_OVERLAP,
     }
 }
 
@@ -91,6 +93,8 @@ fn set_pixel(buffer: &mut [u32], width: usize, height: usize, x: usize, y: usize
     }
 }
 
+/// Centre cross. A negative centre is skipped; a huge one saturates to `usize::MAX`
+/// (float -> int casts saturate), so the additions must saturate too.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn draw_cross(buffer: &mut [u32], width: usize, height: usize, x: f32, y: f32, color: u32) {
     if x < 0.0 || y < 0.0 {
@@ -98,8 +102,8 @@ fn draw_cross(buffer: &mut [u32], width: usize, height: usize, x: f32, y: f32, c
     }
     let (cx, cy) = (x as usize, y as usize);
     for d in 0..=3 {
-        set_pixel(buffer, width, height, cx + d, cy, color);
-        set_pixel(buffer, width, height, cx, cy + d, color);
+        set_pixel(buffer, width, height, cx.saturating_add(d), cy, color);
+        set_pixel(buffer, width, height, cx, cy.saturating_add(d), color);
         if let Some(l) = cx.checked_sub(d) {
             set_pixel(buffer, width, height, l, cy, color);
         }
@@ -161,5 +165,61 @@ fn draw_glyph(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::blobs::Region;
+    use crate::pipeline::tracker::Tracker;
+
+    const W: usize = 64;
+    const H: usize = 48;
+
+    /// A real 10x10 track built through the tracker, then moved to (x, y)
+    fn track_at(x: f32, y: f32) -> Track {
+        let mut tracker = Tracker::new();
+        tracker.update(&[Region {
+            min_x: 10,
+            max_x: 19,
+            min_y: 10,
+            max_y: 19,
+            area: 100,
+            cx: 15.0,
+            cy: 15.0,
+        }]);
+        let mut t = tracker.tracks()[0];
+        t.x = x;
+        t.y = y;
+        t
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn track_outside_the_image_does_not_panic() {
+        let mut buffer = vec![0u32; W * H];
+        for (x, y) in [
+            (-1.0, -1.0),
+            (-100.0, 20.0),
+            (W as f32 + 50.0, 20.0),
+            (20.0, H as f32 + 50.0),
+            (f32::MAX, f32::MAX),
+        ] {
+            draw_tracks(&mut buffer, W, H, &[track_at(x, y)]);
+        }
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn box_entirely_outside_has_no_bounds() {
+        assert_eq!(track_bounds(&track_at(-100.0, 20.0), W, H), None);
+        assert_eq!(track_bounds(&track_at(W as f32 + 50.0, 20.0), W, H), None);
+    }
+
+    #[test]
+    fn box_partly_outside_is_clamped() {
+        // Centre at -1 px, half size 5: the box is clamped to x in [0, 4]
+        assert_eq!(track_bounds(&track_at(-1.0, 20.0), W, H), Some((0, 15, 4, 25)));
     }
 }
